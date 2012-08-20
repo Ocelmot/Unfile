@@ -4,11 +4,6 @@ CFLAGS=-Wall -O3 -fno-strict-aliasing
 all: connection_handler.o btree.o stack.o
 	$(CC) $(CFLAGS) stack.o btree.o connection_handler.o main.c -o unfile_server
 
-
-treetest: btree.o treetest.o
-	$(CC) $(CFLAGS) -g btree.o treetest.c -o treetest
-
-
 clean:
 	rm -f *.o unfile_server treetest
 
