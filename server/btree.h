@@ -3,13 +3,14 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 
 #include "stack.h"
 
 struct node{
 	struct node* right;
 	struct node* left;
-	//pthread_mutex_t mutex;
+	pthread_mutex_t *mutex;
 	int spotted;
 	char hash[20];
 };

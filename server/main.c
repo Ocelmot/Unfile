@@ -9,12 +9,18 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <signal.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <netinet/tcp.h>
 
 #include "connection_handler.h"
 #include "btree.h"
 
+#define MAX_THREADS 200
+
 extern struct btree t;
 int exit_flag=0;
+sem_t threads;
 int sockfd, newsockfd;
 char pass[] = "test";
 
@@ -33,10 +39,10 @@ int main(int argc, char *argv[]){
 	socklen_t clilen;
 	struct sockaddr_in serv_addr, cli_addr;
 	printf("---Starting---\n");
-	btree_init(&t);
 	signal(SIGINT, save);
 	signal(SIGSEGV, flushandquit);
-	
+	sem_init(&threads,0,MAX_THREADS);
+	btree_init(&t);
 	int portno=3000;
 	
 	
@@ -56,27 +62,39 @@ int main(int argc, char *argv[]){
 		fprintf(stderr,"Failed to bind, quitting.\n");
 		exit(1);
 	}
+	int flag=1;
+	setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int)); 
 	listen(sockfd,5);
 	clilen = sizeof(cli_addr);
 	
 	signal(SIGPIPE, SIG_IGN);
 	
-	struct Connection conn;
-	while(!exit_flag){
-		
+	struct Connection *conn;
+	pthread_t thread;
+	while(exit_flag==0){
+		sem_wait(&threads);
 		newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
 		if (newsockfd < 0) {
 			fprintf(stderr,"ERROR on accept\n");
+			continue;
 		}
 		printf("---Connection opened---\n");
-		conn.sock=newsockfd;
-		conn.authenticated=0;
-		handle_connection(conn);
-		printf("---Connection closed---\n");
+		conn = malloc(sizeof(conn));
+		conn->sock=newsockfd;
+		conn->authenticated=0;
+		pthread_create( &thread, NULL, handle_connection, (void*) conn);
 	}
 	
 	close(sockfd);
+	close(newsockfd);
 	
+	if(exit_flag==1){
+		int i;
+		sem_getvalue(&threads,&i);
+		while(i!=MAX_THREADS){
+			sem_getvalue(&threads,&i);
+		}
+	}
 	
 	return 0;
 }

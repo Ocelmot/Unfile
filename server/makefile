@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -O3 -fno-strict-aliasing
+CFLAGS=-Wall -O3 -fno-strict-aliasing -lpthread  -lrt
 
 all: connection_handler.o btree.o stack.o
 	$(CC) $(CFLAGS) stack.o btree.o connection_handler.o main.c -o unfile_server

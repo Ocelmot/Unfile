@@ -10,5 +10,5 @@ struct stack{
 void stack_init(struct stack *s, int size);
 void stack_push(struct stack *s, void *e);
 void *stack_pop(struct stack *s);
-
+void stack_free(struct stack *s);
 #endif

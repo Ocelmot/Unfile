@@ -2,41 +2,54 @@
 #include "mesg.h"
 #include "btree.h"
 
+#include <semaphore.h>
+
 struct btree t;
 
-struct mesg* parse_input(struct Connection conn);
-int handle_message(struct Connection conn, struct mesg* msg);
+struct mesg* parse_input(struct Connection *conn);
+int handle_message(struct Connection *conn, struct mesg* msg);
 
+extern sem_t threads;
 extern char pass[];
 extern int exit_flag;
 
-void handle_connection(struct Connection conn){
+void *handle_connection(void *ptr){
 
+	struct Connection *conn = (struct Connection *)ptr;
 	int status;
 	struct mesg* msg=NULL;
 	
-	
-	while(1){
-		msg=parse_input(conn);
-		if(msg==NULL){
-			break;
-		}
-		
-		status=handle_message(conn,msg);
-		if (status==1){	
+	int n;
+	n = write(conn->sock,"\x00" "\x00" "\x00" "\x00" "\x00" "\x02",6);
+	if (n < 0){
+		fprintf(stderr,"ERROR writing to socket\n");
+		return 1;
+	}else{	
+		while(1){
+			msg=parse_input(conn);
+			if(msg==NULL){
+				break;
+			}
+			
+			status=handle_message(conn,msg);
+			if (status==1){	
+				free(msg->data);
+				free(msg);
+				break;
+			}
+			
+			
 			free(msg->data);
 			free(msg);
-			break;
 		}
-		
-		
-		free(msg->data);
-		free(msg);
 	}
-
-	close(conn.sock);
+	close(conn->sock);
+	free(ptr);
+	sem_post(&threads);
+	printf("---Connection closed---\n");
+	return NULL;
 }
-struct mesg* parse_input(struct Connection conn){
+struct mesg* parse_input(struct Connection *conn){
 
 	int n;
 	int i;
@@ -46,7 +59,7 @@ struct mesg* parse_input(struct Connection conn){
 
 	fd_set set;
 	FD_ZERO(&set);
-	FD_SET(conn.sock, &set);
+	FD_SET(conn->sock, &set);
 	struct timeval timeout;
 	int select_result;
 	
@@ -64,7 +77,7 @@ struct mesg* parse_input(struct Connection conn){
 		timeout.tv_sec = 30;
 		timeout.tv_usec = 0;
 		
-		select_result = select(conn.sock + 1, &set, NULL, NULL, &timeout);
+		select_result = select(conn->sock + 1, &set, NULL, NULL, &timeout);
 		if(select_result<0){
 			msg->len=0;
 			msg->command=0;
@@ -79,7 +92,7 @@ struct mesg* parse_input(struct Connection conn){
 			return msg;
 		}else{
 			if(bytes<6){			//Fill message head
-				n = read(conn.sock,buffer,6-bytes);
+				n = read(conn->sock,buffer,6-bytes);
 				if (n < 0){
 					msg->len=0;
 					msg->command=0;
@@ -152,9 +165,9 @@ struct mesg* parse_input(struct Connection conn){
 			if(bytes>=6){			//fill message tail
 				
 				if((msg->len-(bytes-6))>256){
-					n = read(conn.sock,buffer,256);
+					n = read(conn->sock,buffer,256);
 				}else{
-					n = read(conn.sock,buffer,(msg->len-(bytes-6)));
+					n = read(conn->sock,buffer,(msg->len-(bytes-6)));
 				}
 				memcpy(&(msg->data[bytes-6]),buffer,n);
 				bytes+=n;
@@ -167,7 +180,7 @@ struct mesg* parse_input(struct Connection conn){
 	return msg;
 }
 
-int handle_message(struct Connection conn, struct mesg* msg){
+int handle_message(struct Connection *conn, struct mesg* msg){
 	
 	int n;
 	int result;
@@ -198,13 +211,13 @@ int handle_message(struct Connection conn, struct mesg* msg){
 			switch(msg->subcommand){
 				case 0:
 					result=btree_inc(&t,msg->data);
-					n = write(conn.sock,"\x04" "\x00" "\x00" "\x00" "\x01" "\x00",6);
+					n = write(conn->sock,"\x04" "\x00" "\x00" "\x00" "\x01" "\x00",6);
 					if (n < 0){
 						fprintf(stderr,"ERROR writing to socket\n");
 						return 1;
 					}
 					result = __builtin_bswap32(result);
-					n = write(conn.sock,&result,4);
+					n = write(conn->sock,&result,4);
 					if (n < 0){
 						fprintf(stderr,"ERROR writing to socket\n");
 						return 1;
@@ -212,13 +225,13 @@ int handle_message(struct Connection conn, struct mesg* msg){
 					return 0;
 				case 1:
 					result=btree_get(&t,msg->data);
-					n = write(conn.sock,"\x04" "\x00" "\x00" "\x00" "\x01" "\x00",6);
+					n = write(conn->sock,"\x04" "\x00" "\x00" "\x00" "\x01" "\x00",6);
 					if (n < 0){
 						fprintf(stderr,"ERROR writing to socket\n");
 						return 1;
 					}
 					result = __builtin_bswap32(result);
-					n = write(conn.sock,&result,4);
+					n = write(conn->sock,&result,4);
 					if (n < 0){
 						fprintf(stderr,"ERROR writing to socket\n");
 						return 1;
@@ -229,13 +242,13 @@ int handle_message(struct Connection conn, struct mesg* msg){
 			}
 		case 2:
 			if(strcmp(msg->data,pass)==0){
-				n=write(conn.sock,"\0" "\0" "\0" "\0" "2" "1",6);
+				n=write(conn->sock,"\0" "\0" "\0" "\0" "2" "1",6);
 				if (n < 0){
 					return 1;
 				}
-				conn.authenticated=1;
+				conn->authenticated=1;
 			}else{
-				n=write(conn.sock,"\0" "\0" "\0" "\0" "2" "0",6);
+				n=write(conn->sock,"\0" "\0" "\0" "\0" "2" "0",6);
 				if (n < 0){
 					return 1;
 				}

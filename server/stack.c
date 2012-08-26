@@ -24,3 +24,7 @@ void *stack_pop(struct stack *s){
 	s->index--;
 	return s->stack[s->index];
 }
+void stack_free(struct stack *s){
+	free(s->stack);
+	return;
+}

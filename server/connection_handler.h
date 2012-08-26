@@ -14,7 +14,7 @@ struct Connection{
 };
 
 
-void handle_connection(struct Connection conn);
+void *handle_connection(void *ptr);
 
 
 
